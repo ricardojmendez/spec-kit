@@ -13,6 +13,39 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Spec Number Option
+
+Users can optionally specify a custom spec number when creating a feature by including it in their command. This is particularly useful for matching issue tracker numbers (GitHub issues, Jira tickets, etc.).
+
+**How to recognize spec number in user input:**
+
+- `--spec-number <number>` or `-SpecNumber <number>` format
+- Keywords like "issue #42", "ticket 123", "for issue 1234"
+- Direct number references: "spec 42", "number 99"
+
+**Examples of user input with spec number:**
+
+- "Add user authentication --spec-number 42"
+- "Fix login timeout for issue #123" (extract `123`)
+- "Implement payment API as spec 1234" (use `1234`)
+- "Add search feature --spec-number 99 --branch-prefix feature/"
+
+**If spec number is specified:**
+
+1. Extract the number from the user input
+2. Validate it's a positive integer
+3. Remove the spec number specification from the feature description before processing
+4. Pass the number to the script using the appropriate parameter:
+   - Bash: `--spec-number 42`
+   - PowerShell: `-SpecNumber 42`
+
+**If no spec number is specified:** The script will auto-increment from the highest existing spec number (default behavior).
+
+**Priority order:**
+1. `--spec-number` CLI parameter (highest priority)
+2. `SPECIFY_SPEC_NUMBER` environment variable
+3. Auto-increment (default)
+
 ## Branch Prefix Option
 
 Users can optionally specify a branch prefix when creating a feature by including it in their command. Look for these patterns in the user input:
@@ -67,13 +100,18 @@ Given that feature description, do this:
    **IMPORTANT**:
 
    - Append the short-name argument to the `{SCRIPT}` command with the 2-4 word short name you created in step 1. Keep the feature description as the final argument.
+   - If a spec number was specified (see "Spec Number Option" above), include it as a parameter
    - If a branch prefix was specified (see "Branch Prefix Option" above), include it as a parameter
    - Bash examples: 
      - `--short-name "your-generated-short-name" "Feature description here"`
-     - `--short-name "user-auth" --branch-prefix "feature/" "Add user authentication"`
+     - `--short-name "user-auth" "Add user authentication"`
+     - `--spec-number 42 --short-name "payment-api" "Add payment processing"`
+     - `--spec-number 1234 --short-name "user-auth" --branch-prefix "feature/" "Add user authentication"`
    - PowerShell examples:
      - `-ShortName "your-generated-short-name" "Feature description here"`
-     - `-ShortName "user-auth" -BranchPrefix "feature/" "Add user authentication"`
+     - `-ShortName "user-auth" "Add user authentication"`
+     - `-SpecNumber 42 -ShortName "payment-api" "Add payment processing"`
+     - `-SpecNumber 1234 -ShortName "user-auth" -BranchPrefix "feature/" "Add user authentication"`
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
    - You must only ever run this script once
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
