@@ -4,6 +4,7 @@ set -e
 
 JSON_MODE=false
 SHORT_NAME=""
+BRANCH_PREFIX_ARG=""
 ARGS=()
 i=1
 while [ $i -le $# ]; do
@@ -26,17 +27,33 @@ while [ $i -le $# ]; do
             fi
             SHORT_NAME="$next_arg"
             ;;
+        --branch-prefix)
+            if [ $((i + 1)) -gt $# ]; then
+                echo 'Error: --branch-prefix requires a value' >&2
+                exit 1
+            fi
+            i=$((i + 1))
+            next_arg="${!i}"
+            # Check if the next argument is another option (starts with --)
+            if [[ "$next_arg" == --* ]]; then
+                echo 'Error: --branch-prefix requires a value' >&2
+                exit 1
+            fi
+            BRANCH_PREFIX_ARG="$next_arg"
+            ;;
         --help|-h) 
-            echo "Usage: $0 [--json] [--short-name <name>] <feature_description>"
+            echo "Usage: $0 [--json] [--short-name <name>] [--branch-prefix <prefix>] <feature_description>"
             echo ""
             echo "Options:"
-            echo "  --json              Output in JSON format"
-            echo "  --short-name <name> Provide a custom short name (2-4 words) for the branch"
-            echo "  --help, -h          Show this help message"
+            echo "  --json                  Output in JSON format"
+            echo "  --short-name <name>     Provide a custom short name (2-4 words) for the branch"
+            echo "  --branch-prefix <prefix> Override branch prefix (e.g., 'feature/', 'bugfix/')"
+            echo "  --help, -h              Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0 'Add user authentication system' --short-name 'user-auth'"
             echo "  $0 'Implement OAuth2 integration for API'"
+            echo "  $0 'Fix login bug' --branch-prefix 'bugfix/'"
             exit 0
             ;;
         *) 
@@ -101,6 +118,33 @@ fi
 NEXT=$((HIGHEST + 1))
 FEATURE_NUM=$(printf "%03d" "$NEXT")
 
+# Function to get branch prefix from config or environment variable
+get_branch_prefix() {
+    # Priority: 1. Command-line argument, 2. Environment variable, 3. Config file, 4. Default (empty)
+    if [ -n "$BRANCH_PREFIX_ARG" ]; then
+        echo "$BRANCH_PREFIX_ARG"
+        return
+    fi
+    
+    if [ -n "$SPECIFY_BRANCH_PREFIX" ]; then
+        echo "$SPECIFY_BRANCH_PREFIX"
+        return
+    fi
+    
+    local config_file="$REPO_ROOT/.specify/config.json"
+    if [ -f "$config_file" ]; then
+        # Use grep and sed to extract the prefix value from JSON
+        # This avoids requiring jq to be installed
+        local prefix=$(grep -o '"prefix"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | sed 's/.*"prefix"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        if [ -n "$prefix" ]; then
+            echo "$prefix"
+            return
+        fi
+    fi
+    
+    echo ""
+}
+
 # Function to generate branch name with stop word filtering and length filtering
 generate_branch_name() {
     local description="$1"
@@ -157,7 +201,15 @@ else
     BRANCH_SUFFIX=$(generate_branch_name "$FEATURE_DESCRIPTION")
 fi
 
-BRANCH_NAME="${FEATURE_NUM}-${BRANCH_SUFFIX}"
+# Get branch prefix from config or environment
+BRANCH_PREFIX=$(get_branch_prefix)
+
+# Construct full branch name with optional prefix
+if [ -n "$BRANCH_PREFIX" ]; then
+    BRANCH_NAME="${BRANCH_PREFIX}${FEATURE_NUM}-${BRANCH_SUFFIX}"
+else
+    BRANCH_NAME="${FEATURE_NUM}-${BRANCH_SUFFIX}"
+fi
 
 # GitHub enforces a 244-byte limit on branch names
 # Validate and truncate if necessary

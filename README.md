@@ -252,6 +252,51 @@ Additional commands for enhanced quality and validation:
 | Variable         | Description                                                                                    |
 |------------------|------------------------------------------------------------------------------------------------|
 | `SPECIFY_FEATURE` | Override feature detection for non-Git repositories. Set to the feature directory name (e.g., `001-photo-albums`) to work on a specific feature when not using Git branches.<br/>**Must be set in the context of the agent you're working with prior to using `/speckit.plan` or follow-up commands. |
+| `SPECIFY_BRANCH_PREFIX` | Configure a prefix for git branch names (e.g., `feature/`, `bugfix/`). When set, this prefix is prepended to auto-generated branch names. Overrides the `branch.prefix` setting in `.specify/config.json`. Example: With prefix `feature/`, branch `001-user-auth` becomes `feature/001-user-auth`. |
+
+### Configuration File
+
+The `.specify/config.json` file allows you to configure project-specific settings. This file is automatically created when you initialize a new project with `specify init`.
+
+#### Branch Prefix Configuration
+
+You can configure a default branch prefix for your project that will be applied to all auto-generated branch names:
+
+```json
+{
+  "branch": {
+    "prefix": "feature/"
+  }
+}
+```
+
+**Common patterns:**
+
+- **Feature branches:** `"prefix": "feature/"` → Creates branches like `feature/001-user-auth`
+- **Bugfix branches:** `"prefix": "bugfix/"` → Creates branches like `bugfix/001-fix-login`
+- **Development branches:** `"prefix": "dev/"` → Creates branches like `dev/001-new-api`
+- **No prefix (default):** `"prefix": ""` → Creates branches like `001-user-auth`
+
+**Priority order:**
+
+1. `--branch-prefix` command-line parameter (highest priority, per-feature override)
+2. `SPECIFY_BRANCH_PREFIX` environment variable (per-session override)
+3. `.specify/config.json` file setting (project-wide default)
+4. Default: no prefix (empty string)
+
+This allows you to set project-wide defaults in the config file, override them per-session using the environment variable, or specify them per-feature when creating a new specification.
+
+**Per-feature branch prefix:**
+
+When using the `/speckit.specify` command, you can specify a branch prefix for that specific feature:
+
+```text
+/speckit.specify Add user authentication --branch-prefix feature/
+/speckit.specify Fix login timeout --branch-prefix bugfix/
+/speckit.specify Update API endpoints with prefix hotfix/
+```
+
+The AI agent will recognize the prefix specification and pass it to the `create-new-feature` script.
 
 ## 📚 Core Philosophy
 

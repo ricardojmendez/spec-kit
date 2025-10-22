@@ -13,6 +13,37 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
+## Branch Prefix Option
+
+Users can optionally specify a branch prefix when creating a feature by including it in their command. Look for these patterns in the user input:
+
+- `--branch-prefix <prefix>` or `-BranchPrefix <prefix>` format
+- Keywords like "use prefix", "with prefix", "as a feature branch", "as a bugfix", etc.
+
+**Common prefix patterns:**
+
+- `feature/` - For feature branches
+- `bugfix/` or `fix/` - For bug fixes
+- `hotfix/` - For urgent production fixes
+- `refactor/` - For refactoring work
+- `chore/` - For maintenance tasks
+
+**Examples of user input with branch prefix:**
+
+- "Add user authentication --branch-prefix feature/"
+- "Fix login timeout as a bugfix" (infer `bugfix/` prefix)
+- "Update payment API with prefix hotfix/" (use `hotfix/` prefix)
+
+**If branch prefix is specified:**
+
+1. Extract the prefix from the user input
+2. Remove the prefix specification from the feature description before processing
+3. Pass the prefix to the script using the appropriate parameter:
+   - Bash: `--branch-prefix "prefix-value"`
+   - PowerShell: `-BranchPrefix "prefix-value"`
+
+**If no prefix is specified:** The script will use the default from configuration (`.specify/config.json`) or environment variable.
+
 ## Outline
 
 The text the user typed after `/speckit.specify` in the triggering message **is** the feature description. Assume you always have it available in this conversation even if `{ARGS}` appears literally below. Do not ask the user to repeat it unless they provided an empty command.
@@ -36,8 +67,13 @@ Given that feature description, do this:
    **IMPORTANT**:
 
    - Append the short-name argument to the `{SCRIPT}` command with the 2-4 word short name you created in step 1. Keep the feature description as the final argument.
-   - Bash example: `--short-name "your-generated-short-name" "Feature description here"`
-   - PowerShell example: `-ShortName "your-generated-short-name" "Feature description here"`
+   - If a branch prefix was specified (see "Branch Prefix Option" above), include it as a parameter
+   - Bash examples: 
+     - `--short-name "your-generated-short-name" "Feature description here"`
+     - `--short-name "user-auth" --branch-prefix "feature/" "Add user authentication"`
+   - PowerShell examples:
+     - `-ShortName "your-generated-short-name" "Feature description here"`
+     - `-ShortName "user-auth" -BranchPrefix "feature/" "Add user authentication"`
    - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
    - You must only ever run this script once
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for

@@ -4,6 +4,7 @@
 param(
     [switch]$Json,
     [string]$ShortName,
+    [string]$BranchPrefix,
     [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$FeatureDescription
@@ -12,16 +13,18 @@ $ErrorActionPreference = 'Stop'
 
 # Show help if requested
 if ($Help) {
-    Write-Host "Usage: ./create-new-feature.ps1 [-Json] [-ShortName <name>] <feature description>"
+    Write-Host "Usage: ./create-new-feature.ps1 [-Json] [-ShortName <name>] [-BranchPrefix <prefix>] <feature description>"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Json               Output in JSON format"
-    Write-Host "  -ShortName <name>   Provide a custom short name (2-4 words) for the branch"
-    Write-Host "  -Help               Show this help message"
+    Write-Host "  -Json                   Output in JSON format"
+    Write-Host "  -ShortName <name>       Provide a custom short name (2-4 words) for the branch"
+    Write-Host "  -BranchPrefix <prefix>  Override branch prefix (e.g., 'feature/', 'bugfix/')"
+    Write-Host "  -Help                   Show this help message"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  ./create-new-feature.ps1 'Add user authentication system' -ShortName 'user-auth'"
     Write-Host "  ./create-new-feature.ps1 'Implement OAuth2 integration for API'"
+    Write-Host "  ./create-new-feature.ps1 'Fix login bug' -BranchPrefix 'bugfix/'"
     exit 0
 }
 
@@ -91,6 +94,32 @@ if (Test-Path $specsDir) {
 $next = $highest + 1
 $featureNum = ('{0:000}' -f $next)
 
+# Function to get branch prefix from config or environment variable
+function Get-BranchPrefix {
+    # Priority: 1. Command-line argument, 2. Environment variable, 3. Config file, 4. Default (empty)
+    if ($BranchPrefix) {
+        return $BranchPrefix
+    }
+    
+    if ($env:SPECIFY_BRANCH_PREFIX) {
+        return $env:SPECIFY_BRANCH_PREFIX
+    }
+    
+    $configFile = Join-Path $repoRoot '.specify/config.json'
+    if (Test-Path $configFile) {
+        try {
+            $config = Get-Content $configFile -Raw | ConvertFrom-Json
+            if ($config.branch -and $config.branch.prefix) {
+                return $config.branch.prefix
+            }
+        } catch {
+            # If JSON parsing fails, silently continue with default
+        }
+    }
+    
+    return ""
+}
+
 # Function to generate branch name with stop word filtering and length filtering
 function Get-BranchName {
     param([string]$Description)
@@ -145,7 +174,15 @@ if ($ShortName) {
     $branchSuffix = Get-BranchName -Description $featureDesc
 }
 
-$branchName = "$featureNum-$branchSuffix"
+# Get branch prefix from config or environment
+$branchPrefix = Get-BranchPrefix
+
+# Construct full branch name with optional prefix
+if ($branchPrefix) {
+    $branchName = "$branchPrefix$featureNum-$branchSuffix"
+} else {
+    $branchName = "$featureNum-$branchSuffix"
+}
 
 # GitHub enforces a 244-byte limit on branch names
 # Validate and truncate if necessary
