@@ -253,7 +253,7 @@ Additional commands for enhanced quality and validation:
 |------------------|------------------------------------------------------------------------------------------------|
 | `SPECIFY_FEATURE` | Override feature detection for non-Git repositories. Set to the feature directory name (e.g., `001-photo-albums`) to work on a specific feature when not using Git branches.<br/>**Must be set in the context of the agent you're working with prior to using `/speckit.plan` or follow-up commands. |
 | `SPECIFY_BRANCH_PREFIX` | Configure a prefix for git branch names (e.g., `feature/`, `bugfix/`). When set, this prefix is prepended to auto-generated branch names. Overrides the `branch.prefix` setting in `.specify/config.json`. Example: With prefix `feature/`, branch `001-user-auth` becomes `feature/001-user-auth`. |
-| `SPECIFY_SPEC_NUMBER` | Override the auto-incremented spec number with a custom value (e.g., to match an issue tracker number). When set, the specified number is used instead of finding the next available number. Example: `SPECIFY_SPEC_NUMBER=42` creates spec `042-feature-name`. Can be overridden per-feature using the `--spec-number` parameter in `/speckit.specify`. |
+| `SPECIFY_SPEC_NUMBER` | Override the auto-incremented spec number with a custom value (e.g., to match an issue tracker number). When set, the specified number is used instead of finding the next available number. Example: `SPECIFY_SPEC_NUMBER=42` creates spec `042-feature-name`. Can be overridden per-feature using the `--number` parameter in `/speckit.specify`. |
 
 ### Configuration File
 
@@ -304,14 +304,14 @@ The AI agent will recognize the prefix specification and pass it to the `create-
 You can also specify a custom spec number to match your issue tracker:
 
 ```text
-/speckit.specify Add user authentication --spec-number 42
-/speckit.specify Fix payment bug for issue #123 --spec-number 123
-/speckit.specify Implement search API --spec-number 1234 --branch-prefix feature/
+/speckit.specify Add user authentication --number 42
+/speckit.specify Fix payment bug for issue #123 --number 123
+/speckit.specify Implement search API --number 1234 --branch-prefix feature/
 ```
 
 **Spec number priority:**
 
-1. `--spec-number` command-line parameter (highest priority, per-feature override)
+1. `--number` command-line parameter (highest priority, per-feature override)
 2. `SPECIFY_SPEC_NUMBER` environment variable (per-session override)
 3. Auto-increment from existing specs (default)
 
@@ -481,13 +481,13 @@ delete any comments that you made, but you can't delete comments anybody else ma
 You can align spec numbers with your issue tracker (GitHub Issues, Jira, Linear, etc.) by specifying a custom spec number:
 
 ```text
-/speckit.specify Add user authentication system --spec-number 42
+/speckit.specify Add user authentication system --number 42
 ```
 
 This creates spec `042-add-user-auth` matching issue #42 in your tracker. You can also combine with branch prefixes:
 
 ```text
-/speckit.specify Fix payment processing timeout --spec-number 123 --branch-prefix bugfix/
+/speckit.specify Fix payment processing timeout --number 123 --branch-prefix bugfix/
 ```
 
 This creates:
@@ -496,9 +496,9 @@ This creates:
 
 **Common workflows:**
 
-- **GitHub Issues:** `--spec-number <issue-number>` (e.g., `--spec-number 456`)
-- **Jira Tickets:** `--spec-number <ticket-id>` (e.g., `--spec-number 789` for PROJ-789)
-- **Linear Issues:** `--spec-number <issue-id>` (e.g., `--spec-number 1234`)
+- **GitHub Issues:** `--number <issue-number>` (e.g., `--number 456`)
+- **Jira Tickets:** `--number <ticket-id>` (e.g., `--number 789` for PROJ-789)
+- **Linear Issues:** `--number <issue-id>` (e.g., `--number 1234`)
 
 #### After Running /speckit.specify
 

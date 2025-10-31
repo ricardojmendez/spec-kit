@@ -4,8 +4,8 @@
 param(
     [switch]$Json,
     [string]$ShortName,
+    [int]$Number = 0,
     [string]$BranchPrefix,
-    [string]$SpecNumber,
     [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$FeatureDescription
@@ -14,21 +14,23 @@ $ErrorActionPreference = 'Stop'
 
 # Show help if requested
 if ($Help) {
-    Write-Host "Usage: ./create-new-feature.ps1 [-Json] [-ShortName <name>] [-BranchPrefix <prefix>] [-SpecNumber <number>] <feature description>"
+    Write-Host "Usage: ./create-new-feature.ps1 [-Json] [-ShortName <name>] [-Number N] [-BranchPrefix <prefix>] <feature description>"
     Write-Host ""
     Write-Host "Options:"
-    Write-Host "  -Json                   Output in JSON format"
-    Write-Host "  -ShortName <name>       Provide a custom short name (2-4 words) for the branch"
-    Write-Host "  -BranchPrefix <prefix>  Override branch prefix (e.g., 'feature/', 'bugfix/')"
-    Write-Host "  -SpecNumber <number>    Specify a custom spec number (e.g., to match issue tracker)"
-    Write-Host "  -Help                   Show this help message"
+    Write-Host "  -Json                 Output in JSON format"
+    Write-Host "  -ShortName <name>     Provide a custom short name (2-4 words) for the branch"
+    Write-Host "  -Number N             Specify branch number manually (overrides auto-detection)"
+    Write-Host "  -BranchPrefix <prefix> Specify branch prefix (e.g., 'feature', 'bugfix')"
+    Write-Host "  -Help                 Show this help message"
     Write-Host ""
     Write-Host "Examples:"
     Write-Host "  ./create-new-feature.ps1 'Add user authentication system' -ShortName 'user-auth'"
     Write-Host "  ./create-new-feature.ps1 'Implement OAuth2 integration for API'"
-    Write-Host "  ./create-new-feature.ps1 'Fix login bug' -BranchPrefix 'bugfix/'"
-    Write-Host "  ./create-new-feature.ps1 'Add payment processing' -SpecNumber 42"
-    Write-Host "  ./create-new-feature.ps1 'Implement search feature' -SpecNumber 1234 -BranchPrefix 'feature/'"
+    Write-Host "  ./create-new-feature.ps1 'Fix login bug' -Number 42 -BranchPrefix 'bugfix'"
+    Write-Host ""
+    Write-Host "Environment Variables:"
+    Write-Host "  SPECIFY_SPEC_NUMBER    Set default spec/branch number"
+    Write-Host "  SPECIFY_BRANCH_PREFIX  Set default branch prefix"
     exit 0
 }
 
@@ -63,6 +65,75 @@ function Find-RepositoryRoot {
         $current = $parent
     }
 }
+
+function Get-NextBranchNumber {
+    param(
+        [string]$ShortName,
+        [string]$SpecsDir
+    )
+    
+    # Fetch all remotes to get latest branch info (suppress errors if no remotes)
+    try {
+        git fetch --all --prune 2>$null | Out-Null
+    } catch {
+        # Ignore fetch errors
+    }
+    
+    # Find remote branches matching the pattern using git ls-remote
+    $remoteBranches = @()
+    try {
+        $remoteRefs = git ls-remote --heads origin 2>$null
+        if ($remoteRefs) {
+            $remoteBranches = $remoteRefs | Where-Object { $_ -match "refs/heads/(\d+)-$([regex]::Escape($ShortName))$" } | ForEach-Object {
+                if ($_ -match "refs/heads/(\d+)-") {
+                    [int]$matches[1]
+                }
+            }
+        }
+    } catch {
+        # Ignore errors
+    }
+    
+    # Check local branches
+    $localBranches = @()
+    try {
+        $allBranches = git branch 2>$null
+        if ($allBranches) {
+            $localBranches = $allBranches | Where-Object { $_ -match "^\*?\s*(\d+)-$([regex]::Escape($ShortName))$" } | ForEach-Object {
+                if ($_ -match "(\d+)-") {
+                    [int]$matches[1]
+                }
+            }
+        }
+    } catch {
+        # Ignore errors
+    }
+    
+    # Check specs directory
+    $specDirs = @()
+    if (Test-Path $SpecsDir) {
+        try {
+            $specDirs = Get-ChildItem -Path $SpecsDir -Directory | Where-Object { $_.Name -match "^(\d+)-$([regex]::Escape($ShortName))$" } | ForEach-Object {
+                if ($_.Name -match "^(\d+)-") {
+                    [int]$matches[1]
+                }
+            }
+        } catch {
+            # Ignore errors
+        }
+    }
+    
+    # Combine all sources and get the highest number
+    $maxNum = 0
+    foreach ($num in ($remoteBranches + $localBranches + $specDirs)) {
+        if ($num -gt $maxNum) {
+            $maxNum = $num
+        }
+    }
+    
+    # Return next number
+    return $maxNum + 1
+}
 $fallbackRoot = (Find-RepositoryRoot -StartDir $PSScriptRoot)
 if (-not $fallbackRoot) {
     Write-Error "Error: Could not determine repository root. Please run this script from within the repository."
@@ -85,94 +156,6 @@ Set-Location $repoRoot
 
 $specsDir = Join-Path $repoRoot 'specs'
 New-Item -ItemType Directory -Path $specsDir -Force | Out-Null
-
-# Function to get spec number from various sources
-function Get-SpecNumber {
-    # Priority: 1. Command-line argument, 2. Environment variable, 3. Auto-increment
-    if ($SpecNumber) {
-        # Validate it's a positive integer
-        $num = 0
-        if (-not [int]::TryParse($SpecNumber, [ref]$num) -or $num -lt 0) {
-            Write-Error "Error: -SpecNumber must be a positive integer"
-            exit 1
-        }
-        
-        # Pad to at least 3 digits
-        if ($num -lt 100) {
-            return ('{0:000}' -f $num)
-        } else {
-            return $SpecNumber
-        }
-    }
-    
-    if ($env:SPECIFY_SPEC_NUMBER) {
-        # Validate it's a positive integer
-        $num = 0
-        if (-not [int]::TryParse($env:SPECIFY_SPEC_NUMBER, [ref]$num) -or $num -lt 0) {
-            Write-Error "Error: SPECIFY_SPEC_NUMBER must be a positive integer"
-            exit 1
-        }
-        
-        # Pad to at least 3 digits
-        if ($num -lt 100) {
-            return ('{0:000}' -f $num)
-        } else {
-            return $env:SPECIFY_SPEC_NUMBER
-        }
-    }
-    
-    # Auto-increment: find highest existing number
-    $highest = 0
-    if (Test-Path $specsDir) {
-        Get-ChildItem -Path $specsDir -Directory | ForEach-Object {
-            if ($_.Name -match '^(\d+)') {
-                $num = [int]$matches[1]
-                if ($num -gt $highest) { $highest = $num }
-            }
-        }
-    }
-    $next = $highest + 1
-    return ('{0:000}' -f $next)
-}
-
-$featureNum = Get-SpecNumber
-
-# Check for conflicts with existing spec numbers
-if (Test-Path $specsDir) {
-    Get-ChildItem -Path $specsDir -Directory | ForEach-Object {
-        if ($_.Name -match "^$featureNum-") {
-            Write-Error "Error: Spec number $featureNum already exists in directory: $($_.Name)"
-            Write-Error "Please choose a different spec number or remove the existing spec."
-            exit 1
-        }
-    }
-}
-
-# Function to get branch prefix from config or environment variable
-function Get-BranchPrefix {
-    # Priority: 1. Command-line argument, 2. Environment variable, 3. Config file, 4. Default (empty)
-    if ($BranchPrefix) {
-        return $BranchPrefix
-    }
-    
-    if ($env:SPECIFY_BRANCH_PREFIX) {
-        return $env:SPECIFY_BRANCH_PREFIX
-    }
-    
-    $configFile = Join-Path $repoRoot '.specify/config.json'
-    if (Test-Path $configFile) {
-        try {
-            $config = Get-Content $configFile -Raw | ConvertFrom-Json
-            if ($config.branch -and $config.branch.prefix) {
-                return $config.branch.prefix
-            }
-        } catch {
-            # If JSON parsing fails, silently continue with default
-        }
-    }
-    
-    return ""
-}
 
 # Function to generate branch name with stop word filtering and length filtering
 function Get-BranchName {
@@ -228,11 +211,69 @@ if ($ShortName) {
     $branchSuffix = Get-BranchName -Description $featureDesc
 }
 
-# Get branch prefix from config or environment
-$branchPrefix = Get-BranchPrefix
+# Determine branch number
+if ($Number -eq 0) {
+    if ($hasGit) {
+        # Check existing branches on remotes
+        $Number = Get-NextBranchNumber -ShortName $branchSuffix -SpecsDir $specsDir
+    } else {
+        # Fall back to local directory check
+        $highest = 0
+        if (Test-Path $specsDir) {
+            Get-ChildItem -Path $specsDir -Directory | ForEach-Object {
+                if ($_.Name -match '^(\d{3})') {
+                    $num = [int]$matches[1]
+                    if ($num -gt $highest) { $highest = $num }
+                }
+            }
+        }
+        $Number = $highest + 1
+    }
+}
 
-# Construct full branch name with optional prefix
+$featureNum = ('{0:000}' -f $Number)
+
+# Function to determine branch prefix
+function Get-BranchPrefix {
+    param(
+        [string]$BranchPrefixArg,
+        [string]$RepoRoot
+    )
+    
+    # Priority: CLI arg > environment variable > config file > empty string
+    if ($BranchPrefixArg) {
+        return $BranchPrefixArg
+    }
+    
+    if ($env:SPECIFY_BRANCH_PREFIX) {
+        return $env:SPECIFY_BRANCH_PREFIX
+    }
+    
+    # Check config file
+    $configFile = Join-Path $RepoRoot '.specify/config.json'
+    if (Test-Path $configFile) {
+        try {
+            $config = Get-Content $configFile -Raw | ConvertFrom-Json
+            if ($config.branch_prefix) {
+                return $config.branch_prefix
+            }
+        } catch {
+            # Ignore config parsing errors
+        }
+    }
+    
+    return ""
+}
+
+# Determine branch prefix
+$branchPrefix = Get-BranchPrefix -BranchPrefixArg $BranchPrefix -RepoRoot $repoRoot
+
+# Construct branch name with optional prefix
 if ($branchPrefix) {
+    # Ensure prefix ends with /
+    if (-not $branchPrefix.EndsWith('/')) {
+        $branchPrefix = "$branchPrefix/"
+    }
     $branchName = "$branchPrefix$featureNum-$branchSuffix"
 } else {
     $branchName = "$featureNum-$branchSuffix"
@@ -243,8 +284,9 @@ if ($branchPrefix) {
 $maxBranchLength = 244
 if ($branchName.Length -gt $maxBranchLength) {
     # Calculate how much we need to trim from suffix
-    # Account for: feature number (3) + hyphen (1) = 4 chars
-    $maxSuffixLength = $maxBranchLength - 4
+    # Account for: prefix length + feature number (3) + hyphen (1)
+    $prefixLength = $branchPrefix.Length
+    $maxSuffixLength = $maxBranchLength - $prefixLength - 4
     
     # Truncate suffix
     $truncatedSuffix = $branchSuffix.Substring(0, [Math]::Min($branchSuffix.Length, $maxSuffixLength))
@@ -252,7 +294,11 @@ if ($branchName.Length -gt $maxBranchLength) {
     $truncatedSuffix = $truncatedSuffix -replace '-$', ''
     
     $originalBranchName = $branchName
-    $branchName = "$featureNum-$truncatedSuffix"
+    if ($branchPrefix) {
+        $branchName = "$branchPrefix$featureNum-$truncatedSuffix"
+    } else {
+        $branchName = "$featureNum-$truncatedSuffix"
+    }
     
     Write-Warning "[specify] Branch name exceeded GitHub's 244-byte limit"
     Write-Warning "[specify] Original: $originalBranchName ($($originalBranchName.Length) bytes)"

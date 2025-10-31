@@ -19,7 +19,7 @@ Users can optionally specify a custom spec number when creating a feature by inc
 
 **How to recognize spec number in user input:**
 
-- `--spec-number <number>` or `-SpecNumber <number>` format
+- `--number <number>` or `-SpecNumber <number>` format
 - Keywords like "issue #42", "ticket 123", "for issue 1234"
 - Direct number references: "spec 42", "number 99"
 - **Natural language patterns combining prefix and number:**
@@ -58,10 +58,10 @@ Users can optionally specify a custom spec number when creating a feature by inc
 
 **Examples of user input with spec number:**
 
-- "Add user authentication --spec-number 42" (explicit parameter)
+- "Add user authentication --number 42" (explicit parameter)
 - "Fix login timeout for issue #123" (extract `123` only)
 - "Implement payment API as spec 1234" (extract `1234` only)
-- "Add search feature --spec-number 99 --branch-prefix feature/" (explicit parameters)
+- "Add search feature --number 99 --branch-prefix feature/" (explicit parameters)
 - "feature 303 add shopping cart" (extract `feature/` and `303` - adjacent pattern)
 - "bugfix 666 fix payment timeout" (extract `bugfix/` and `666` - adjacent pattern)
 - "This is feature 221" (extract `feature/` and `221` - adjacent pattern in sentence)
@@ -89,13 +89,13 @@ Users can optionally specify a custom spec number when creating a feature by inc
    - Clean up any resulting double spaces or hanging prepositions
    
 4. **Pass to script:**
-   - Bash: `--spec-number 42` and optionally `--branch-prefix "feature/"`
+   - Bash: `--number 42` and optionally `--branch-prefix "feature/"`
    - PowerShell: `-SpecNumber 42` and optionally `-BranchPrefix "feature/"`
 
 **If no spec number is specified:** The script will auto-increment from the highest existing spec number (default behavior).
 
 **Priority order:**
-1. `--spec-number` CLI parameter (highest priority)
+1. `--number` CLI parameter (highest priority)
 2. `SPECIFY_SPEC_NUMBER` environment variable
 3. Auto-increment (default)
 
@@ -177,10 +177,33 @@ Given that feature description, do this:
      - "Create a dashboard for analytics" → "analytics-dashboard"
      - "Fix payment processing timeout bug" → "fix-payment-timeout"
 
-2. Run the script `{SCRIPT}` from repo root **with the short-name argument** and parse its JSON output for BRANCH_NAME and SPEC_FILE. All file paths must be absolute.
+2. **Check for existing branches before creating new one**:
+   
+   a. First, fetch all remote branches to ensure we have the latest information:
+      ```bash
+      git fetch --all --prune
+      ```
+   
+   b. Find the highest feature number across all sources for the short-name:
+      - Remote branches: `git ls-remote --heads origin | grep -E 'refs/heads/[0-9]+-<short-name>$'`
+      - Local branches: `git branch | grep -E '^[* ]*[0-9]+-<short-name>$'`
+      - Specs directories: Check for directories matching `specs/[0-9]+-<short-name>`
+   
+   c. Determine the next available number:
+      - Extract all numbers from all three sources
+      - Find the highest number N
+      - Use N+1 for the new branch number
+   
+   d. Run the script `{SCRIPT}` with the calculated number and short-name:
+      - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
+      - Bash example: `{SCRIPT} --json --number 5 --short-name "user-auth" "Add user authentication"`
+      - PowerShell example: `{SCRIPT} -Json -Number 5 -ShortName "user-auth" "Add user authentication"`   
 
    **IMPORTANT**:
 
+   - Check all three sources (remote branches, local branches, specs directories) to find the highest number
+   - Only match branches/directories with the exact short-name pattern
+   - If no existing branches/directories found with this short-name, start with number 1
    - Append the short-name argument to the `{SCRIPT}` command with the 2-4 word short name you created in step 1. Keep the feature description as the final argument.
    - If a spec number was specified (see "Spec Number Option" above), include it as a parameter
    - If a branch prefix was specified (see "Branch Prefix Option" above), include it as a parameter
@@ -188,10 +211,10 @@ Given that feature description, do this:
    - Bash examples: 
      - `--short-name "your-generated-short-name" "Feature description here"`
      - `--short-name "user-auth" "Add user authentication"`
-     - `--spec-number 42 --short-name "payment-api" "Add payment processing"`
-     - `--spec-number 1234 --short-name "user-auth" --branch-prefix "feature/" "Add user authentication"`
-     - `--spec-number 303 --branch-prefix "feature/" --short-name "shopping-cart" "Add shopping cart"` (from "feature 303 add shopping cart")
-     - `--spec-number 666 --branch-prefix "bugfix/" --short-name "payment-timeout" "Fix payment timeout"` (from "bugfix 666 fix payment timeout")
+     - `--number 42 --short-name "payment-api" "Add payment processing"`
+     - `--number 1234 --short-name "user-auth" --branch-prefix "feature/" "Add user authentication"`
+     - `--number 303 --branch-prefix "feature/" --short-name "shopping-cart" "Add shopping cart"` (from "feature 303 add shopping cart")
+     - `--number 666 --branch-prefix "bugfix/" --short-name "payment-timeout" "Fix payment timeout"` (from "bugfix 666 fix payment timeout")
    - PowerShell examples:
      - `-ShortName "your-generated-short-name" "Feature description here"`
      - `-ShortName "user-auth" "Add user authentication"`
@@ -199,9 +222,10 @@ Given that feature description, do this:
      - `-SpecNumber 1234 -ShortName "user-auth" -BranchPrefix "feature/" "Add user authentication"`
      - `-SpecNumber 303 -BranchPrefix "feature/" -ShortName "shopping-cart" "Add shopping cart"` (from "feature 303 add shopping cart")
      - `-SpecNumber 666 -BranchPrefix "bugfix/" -ShortName "payment-timeout" "Fix payment timeout"` (from "bugfix 666 fix payment timeout")
-   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
-   - You must only ever run this script once
    - The JSON is provided in the terminal as output - always refer to it to get the actual content you're looking for
+   - The JSON output will contain BRANCH_NAME and SPEC_FILE paths
+   - For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot")
+   - You must only ever run this script once per feature
 
 3. Load `templates/spec-template.md` to understand required sections.
 
