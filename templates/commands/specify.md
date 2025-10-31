@@ -23,38 +23,74 @@ Users can optionally specify a custom spec number when creating a feature by inc
 - Keywords like "issue #42", "ticket 123", "for issue 1234"
 - Direct number references: "spec 42", "number 99"
 - **Natural language patterns combining prefix and number:**
-  - "feature 303" → extract prefix `feature/` and number `303`
-  - "bugfix 666" → extract prefix `bugfix/` and number `666`
-  - "hotfix 42" → extract prefix `hotfix/` and number `42`
-  - "fix 123" → extract prefix `bugfix/` and number `123` (normalize "fix" to "bugfix")
-  - "chore 999" → extract prefix `chore/` and number `999`
+  
+  **Detection algorithm (use in order):**
+  
+  1. **First, look for adjacent prefix + number** (most common):
+     - Pattern: `[prefix_keyword] [number]` appearing together
+     - Examples: "feature 303", "bugfix 666", "hotfix 42", "fix 123"
+     - If found: Extract both prefix and number, done.
+  
+  2. **If not found, scan the entire input more broadly**:
+     - Search **anywhere** in the input for prefix keywords:
+       - "feature" or "features" → `feature/`
+       - "bugfix" or "bug fix" or "fix" → `bugfix/`
+       - "hotfix" or "hot fix" → `hotfix/`
+       - "chore" → `chore/`
+       - "refactor" or "refactoring" → `refactor/`
+     - Search **anywhere** in the input for number patterns: "#221", "221", "issue 221", "ticket 221", "spec 221", "number 221"
+     - If BOTH prefix keyword AND number found: Combine them
+     - If only number found: Extract just the number (auto-prefix from config)
+     - If only prefix keyword found: Ignore (not enough information)
+  
+  3. **Handle conflicts** (if multiple prefix keywords found):
+     - Use the keyword that appears closest to the number
+     - If equidistant, prefer more specific: "bugfix" > "fix"
+     - If still tied, use first occurrence (left to right)
+  
+  **This handles all these patterns:**
+  - "feature 303 add cart" ✓ (adjacent)
+  - "This is feature 221" ✓ (adjacent within sentence)
+  - "For issue #221, make it a feature" ✓ (separated, closest keyword)
+  - "#221 feature" ✓ (separated, number first)
+  - "issue #221" ✓ (just number)
+  - "Add shopping cart feature 303" ✓ (adjacent but later in sentence)
 
 **Examples of user input with spec number:**
 
-- "Add user authentication --spec-number 42"
-- "Fix login timeout for issue #123" (extract `123`)
-- "Implement payment API as spec 1234" (use `1234`)
-- "Add search feature --spec-number 99 --branch-prefix feature/"
-- "feature 303 add shopping cart" (extract prefix `feature/` and number `303`)
-- "bugfix 666 fix payment timeout" (extract prefix `bugfix/` and number `666`)
+- "Add user authentication --spec-number 42" (explicit parameter)
+- "Fix login timeout for issue #123" (extract `123` only)
+- "Implement payment API as spec 1234" (extract `1234` only)
+- "Add search feature --spec-number 99 --branch-prefix feature/" (explicit parameters)
+- "feature 303 add shopping cart" (extract `feature/` and `303` - adjacent pattern)
+- "bugfix 666 fix payment timeout" (extract `bugfix/` and `666` - adjacent pattern)
+- "This is feature 221" (extract `feature/` and `221` - adjacent pattern in sentence)
+- "For issue #221, make it a feature" (extract `feature/` and `221` - separated, keyword closest to number)
+- "Add hotfix 42 for critical bug" (extract `hotfix/` and `42` - adjacent pattern)
+- "#999 chore cleanup old files" (extract `chore/` and `999` - number first, then keyword)
 
 **If spec number is specified:**
 
-1. Extract the number from the user input
-2. **If using natural language pattern** (e.g., "feature 303"):
-   - Extract the prefix type (feature, bugfix, hotfix, fix, chore, etc.)
+1. **Scan and extract** using the detection algorithm above:
+   - Look for adjacent patterns first (e.g., "feature 303")
+   - If not found, scan entire input for separated keywords and numbers
+   - Extract both prefix type and number if found together
+   
+2. **Process extracted values:**
    - Normalize "fix" to "bugfix/" for consistency
+   - Normalize "bug fix" to "bugfix/" for consistency  
+   - Normalize "hot fix" to "hotfix/" for consistency
    - Add trailing slash to create proper prefix (e.g., "feature" → "feature/")
-   - Extract the number following the prefix type
-   - Remove the entire pattern from the feature description before processing
-3. Validate the number is a positive integer
-4. Remove the spec number specification from the feature description before processing
-5. Pass the number to the script using the appropriate parameter:
-   - Bash: `--spec-number 42`
-   - PowerShell: `-SpecNumber 42`
-6. If a prefix was also extracted from the natural language pattern, pass it too:
-   - Bash: `--spec-number 303 --branch-prefix "feature/"`
-   - PowerShell: `-SpecNumber 303 -BranchPrefix "feature/"`
+   - Validate the number is a positive integer
+   
+3. **Clean the feature description:**
+   - Remove the spec number from the description (e.g., "221" or "#221" or "issue 221")
+   - Remove the prefix keyword if it was used as a branch type indicator (e.g., remove "feature" from "This is feature 221" to get "This is")
+   - Clean up any resulting double spaces or hanging prepositions
+   
+4. **Pass to script:**
+   - Bash: `--spec-number 42` and optionally `--branch-prefix "feature/"`
+   - PowerShell: `-SpecNumber 42` and optionally `-BranchPrefix "feature/"`
 
 **If no spec number is specified:** The script will auto-increment from the highest existing spec number (default behavior).
 
@@ -64,12 +100,14 @@ Users can optionally specify a custom spec number when creating a feature by inc
 3. Auto-increment (default)
 
 **Recognized prefix types for natural language patterns:**
-- `feature` → `feature/`
-- `bugfix` → `bugfix/`
-- `fix` → `bugfix/` (normalized)
-- `hotfix` → `hotfix/`
+- `feature` or `features` → `feature/`
+- `bugfix` or `bug fix` → `bugfix/`
+- `fix` → `bugfix/` (normalized, lower priority if "bugfix" also present)
+- `hotfix` or `hot fix` → `hotfix/`
 - `chore` → `chore/`
-- `refactor` → `refactor/`
+- `refactor` or `refactoring` → `refactor/`
+
+**Key principle:** Scan the ENTIRE user input for these keywords and numbers. They don't need to be adjacent or in any particular order. The algorithm will find them wherever they appear.
 
 ## Branch Prefix Option
 
@@ -78,11 +116,16 @@ Users can optionally specify a branch prefix when creating a feature by includin
 - `--branch-prefix <prefix>` or `-BranchPrefix <prefix>` format
 - Keywords like "use prefix", "with prefix", "as a feature branch", "as a bugfix", etc.
 - **Natural language patterns** (also extracts spec number if present):
-  - "feature 303" → prefix `feature/` and number `303`
-  - "bugfix 666" → prefix `bugfix/` and number `666`
-  - "hotfix 42" → prefix `hotfix/` and number `42`
+  - Scan the entire input for prefix keywords: "feature", "bugfix", "hotfix", "chore", "refactor"
+  - These keywords can appear anywhere in the sentence, not just adjacent to a number
+  - Examples:
+    - "feature 303" → prefix `feature/` and number `303` (adjacent)
+    - "This is feature 221" → prefix `feature/` and number `221` (adjacent in sentence)
+    - "bugfix 666 fix timeout" → prefix `bugfix/` and number `666` (adjacent)
+    - "For issue #42, make it a hotfix" → prefix `hotfix/` and number `42` (separated)
+    - "#999 chore task" → prefix `chore/` and number `999` (number first)
 
-  The reference to prefix and number may come anywhere in the prompt.
+  **Key:** The reference to prefix and number may come anywhere in the prompt - scan the entire input.
 
 **Common prefix patterns:**
 
@@ -94,11 +137,14 @@ Users can optionally specify a branch prefix when creating a feature by includin
 
 **Examples of user input with branch prefix:**
 
-- "Add user authentication --branch-prefix feature/"
-- "Fix login timeout as a bugfix" (infer `bugfix/` prefix)
-- "Update payment API with prefix hotfix/" (use `hotfix/` prefix)
-- "feature 303 implement shopping cart" (extract both prefix `feature/` and number `303`)
-- "bugfix 666 resolve payment issue" (extract both prefix `bugfix/` and number `666`)
+- "Add user authentication --branch-prefix feature/" (explicit parameter)
+- "Fix login timeout as a bugfix" (infer `bugfix/` prefix from keyword)
+- "Update payment API with prefix hotfix/" (explicit mention of prefix)
+- "feature 303 implement shopping cart" (extract `feature/` and `303` - adjacent)
+- "This is feature 221 for auth" (extract `feature/` and `221` - adjacent in sentence)
+- "bugfix 666 resolve payment issue" (extract `bugfix/` and `666` - adjacent)
+- "For issue #42, create hotfix branch" (extract `hotfix/` and `42` - separated)
+- "Make #100 a chore task" (extract `chore/` and `100` - separated)
 
 **If branch prefix is specified:**
 
