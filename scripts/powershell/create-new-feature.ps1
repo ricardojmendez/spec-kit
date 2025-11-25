@@ -42,6 +42,14 @@ if (-not $FeatureDescription -or $FeatureDescription.Count -eq 0) {
 
 $featureDesc = ($FeatureDescription -join ' ').Trim()
 
+# Check environment variables
+if ($Number -eq 0 -and $env:SPECIFY_SPEC_NUMBER) {
+    $Number = [int]$env:SPECIFY_SPEC_NUMBER
+}
+if (-not $BranchPrefix -and $env:SPECIFY_BRANCH_PREFIX) {
+    $BranchPrefix = $env:SPECIFY_BRANCH_PREFIX
+}
+
 # Resolve repository root. Prefer git information when available, but fall back
 # to searching for repository markers so the workflow still functions in repositories that
 # were initialized with --no-git.

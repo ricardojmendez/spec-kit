@@ -263,7 +263,10 @@ fi
 
 # Determine branch number
 if [ -z "$BRANCH_NUMBER" ]; then
-    if [ "$HAS_GIT" = true ]; then
+    # Check environment variable first
+    if [ -n "$SPECIFY_SPEC_NUMBER" ]; then
+        BRANCH_NUMBER="$SPECIFY_SPEC_NUMBER"
+    elif [ "$HAS_GIT" = true ]; then
         # Check existing branches on remotes
         BRANCH_NUMBER=$(check_existing_branches "$BRANCH_SUFFIX" "$SPECS_DIR")
     else

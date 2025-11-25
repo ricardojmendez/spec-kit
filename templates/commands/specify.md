@@ -75,7 +75,6 @@ Users can optionally specify a custom spec number when creating a feature by inc
 - "feature branch, number 9696" (extract `feature/` and `9696` - separated pattern)
 - "feature 303 add shopping cart" (extract `feature/` and `303` - adjacent pattern)
 - "bugfix 666 fix payment timeout" (extract `bugfix/` and `666` - adjacent pattern)
-- "bugfix 666 fix payment timeout" (extract `bugfix/` and `666` - adjacent pattern)
 - "This is feature 221" (extract `feature/` and `221` - adjacent pattern in sentence)
 - "For issue #221, make it a feature" (extract `feature/` and `221` - separated, keyword closest to number)
 - "Add hotfix 42 for critical bug" (extract `hotfix/` and `42` - adjacent pattern)
@@ -113,7 +112,6 @@ Users can optionally specify a custom spec number when creating a feature by inc
 **Recognized prefix types for natural language patterns:**
 - `feature` or `features` or `feature branch` → `feature/`
 - `bugfix` or `bug fix` → `bugfix/`
-- `fix` → `bugfix/` (normalized, lower priority if "bugfix" also present)
 - `fix` → `bugfix/` (normalized, lower priority if "bugfix" also present)
 - `hotfix` or `hot fix` → `hotfix/`
 - `chore` → `chore/`
@@ -208,11 +206,22 @@ Given that feature description, do this:
    
    b. Find the highest feature number across all sources for the short-name:
       - Remote branches: `git ls-remote --heads origin | grep -E 'refs/heads/[0-9]+-<short-name>$'`
+      - Local branches: `git branch | grep -E '^[* ]*[0-9]+-<short-name>$'`
+      - Specs directories: Check for directories matching `specs/[0-9]+-<short-name>`
+   
+   c. Determine the next available number:
+      - Extract all numbers from all three sources
+      - Find the highest number N
+      - Use N+1 for the new branch number
+   
    d. Run the script `{SCRIPT}` with the calculated number and short-name:
-      - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
       - **CRITICAL**: Use the spec number and branch prefix **extracted in Step 1a** if available.
-      - Bash example: `{SCRIPT} --json --number 5 --short-name "user-auth" "Add user authentication"`
-      - PowerShell example: `{SCRIPT} -Json -Number 5 -ShortName "user-auth" "Add user authentication"`   
+      - Pass `--number N+1` and `--short-name "your-short-name"` along with the feature description
+      - If branch prefix was extracted, also pass `--branch-prefix "prefix/"`
+      - Bash example without prefix: `{SCRIPT} --json --number 5 --short-name "user-auth" "Add user authentication"`
+      - Bash example with prefix: `{SCRIPT} --json --number 5 --branch-prefix "feature/" --short-name "user-auth" "Add user authentication"`
+      - PowerShell example without prefix: `{SCRIPT} -Json -Number 5 -ShortName "user-auth" "Add user authentication"`
+      - PowerShell example with prefix: `{SCRIPT} -Json -Number 5 -BranchPrefix "feature/" -ShortName "user-auth" "Add user authentication"`   
 
    **IMPORTANT**:
 
@@ -220,17 +229,10 @@ Given that feature description, do this:
    - Only match branches/directories with the exact short-name pattern
    - If no existing branches/directories found with this short-name, start with number 1
    - Append the short-name argument to the `{SCRIPT}` command with the 2-4 word short name you created in step 1. Keep the feature description as the final argument.
-   - If a spec number was extracted in Step 1a, include it as a parameter
-   - If a branch prefix was extracted in Step 1a, include it as a parameter
-   - **Note:** Natural language patterns like "feature 303" or "bugfix 666" provide BOTH prefix and number - extract and pass both parameters
+   - **CRITICAL**: If a spec number was extracted in Step 1a, include `--number <number>` parameter (Bash) or `-SpecNumber <number>` (PowerShell)
+   - **CRITICAL**: If a branch prefix was extracted in Step 1a, include `--branch-prefix "prefix/"` parameter (Bash) or `-BranchPrefix "prefix/"` (PowerShell)
+   - **Note:** Natural language patterns like "feature 303" or "bugfix 666" provide BOTH prefix and number - you MUST extract and pass BOTH parameters to the script
 
-   - Check all three sources (remote branches, local branches, specs directories) to find the highest number
-   - Only match branches/directories with the exact short-name pattern
-   - If no existing branches/directories found with this short-name, start with number 1
-   - Append the short-name argument to the `{SCRIPT}` command with the 2-4 word short name you created in step 1. Keep the feature description as the final argument.
-   - If a spec number was specified (see "Spec Number Option" above), include it as a parameter
-   - If a branch prefix was specified (see "Branch Prefix Option" above), include it as a parameter
-   - **Note:** Natural language patterns like "feature 303" or "bugfix 666" provide BOTH prefix and number - extract and pass both parameters
    - Bash examples: 
      - `--short-name "your-generated-short-name" "Feature description here"`
      - `--short-name "user-auth" "Add user authentication"`

@@ -110,14 +110,14 @@ find_feature_dir_by_prefix() {
     # Could be in format: 004-name or feature/004-name or bugfix/004-name
     local matches=()
     if [[ -d "$specs_dir" ]]; then
-        for dir in "$specs_dir"/*"$number"-*; do
-            if [[ -d "$dir" ]]; then
-                local dirname=$(basename "$dir")
-                # Verify it actually matches our pattern (not just contains the number)
-                if [[ "$dirname" =~ ^(([a-z]+/)?$number)- ]]; then
-                    matches+=("$dirname")
-                fi
+        # Use find to search more precisely - avoid glob matching issues
+        while IFS= read -r -d '' dir; do
+            local dirname=$(basename "$dir")
+            # Verify it actually matches our pattern: starts with optional prefix/ then number-
+            if [[ "$dirname" =~ ^(([a-z]+/)?$number)- ]]; then
+                matches+=("$dirname")
             fi
+        done < <(find "$specs_dir" -mindepth 1 -maxdepth 1 -type d -print0)
         done
     fi
 
