@@ -118,7 +118,6 @@ find_feature_dir_by_prefix() {
                 matches+=("$dirname")
             fi
         done < <(find "$specs_dir" -mindepth 1 -maxdepth 1 -type d -print0)
-        done
     fi
 
     # Handle results
